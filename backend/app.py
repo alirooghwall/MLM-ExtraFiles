@@ -118,7 +118,7 @@ async def call_remote_hf_space(prompt: str, max_tokens: int = 400) -> str:
     Call a Hugging Face Space that uses Gradio's /run/predict endpoint.
     The Space should accept a single text input and return text in data[0].
     """
-    if not HF_SPACE_URL or not HF_TOKEN:
+    if not HF_SPACE_URL:
         raise RuntimeError("HF_SPACE_URL and HF_TOKEN must be set for remote AI calls.")
 
     payload = {"data": [prompt]}
