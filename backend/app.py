@@ -436,6 +436,17 @@ async def upload_file(user_id: str, background: BackgroundTasks, file: UploadFil
     return {"ok": True, "summary": extracted_text[:1000]}
 
 # ----------------------------
+
+@app.get("/")
+async def root():
+    return {
+        "ok": True,
+        "message": "MLM Study Coach API is running ✅",
+        "routes": ["/chat", "/quiz/start", "/quiz/answer", "/task/update", "/upload", "/health"]
+    }
+
+
+
 # Health check
 # ----------------------------
 @app.get("/health")
