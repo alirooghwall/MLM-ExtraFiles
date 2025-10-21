@@ -40,8 +40,8 @@ except Exception:
 # Configuration (via ENV VARS)
 # ----------------------------
 MONGO_URI = os.getenv("MONGO_URI")
-HF_TOKEN = os.getenv("HF_TOKEN")               # Hugging Face token (if needed)
-HF_SPACE_URL = os.getenv("HF_SPACE_URL")       # e.g. https://username-space.hf.space/run/predict
+HF_SPACE_URL = os.getenv("HF_SPACE_URL")  # e.g. https://axelord999-mlm-study-coach.hf.space/run/predict
+HF_TOKEN = None  # No token needed for public Space
 LOCAL_MODEL = os.getenv("LOCAL_MODEL", "0") == "1"  # "1" to load local transformers model (only if you installed libs and have resources)
 LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "")  # e.g. "tiiuae/falcon-7b-instruct"
 
@@ -115,24 +115,24 @@ if LOCAL_MODEL:
 
 async def call_remote_hf_space(prompt: str, max_tokens: int = 400) -> str:
     """
-    Call a Hugging Face Space that uses Gradio's /run/predict endpoint.
-    The Space should accept a single text input and return text in data[0].
+    Call a public Hugging Face Space without authentication.
     """
     if not HF_SPACE_URL:
-        raise RuntimeError("HF_SPACE_URL and HF_TOKEN must be set for remote AI calls.")
+        raise RuntimeError("HF_SPACE_URL must be set for remote AI calls.")
 
     payload = {"data": [prompt]}
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    headers = {}
+    if HF_TOKEN:  # only send token if it exists
+        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(HF_SPACE_URL, json=payload, headers=headers)
         r.raise_for_status()
         resp_json = r.json()
-        # Gradio run/predict returns {"data": [...], "duration": ...}
         if isinstance(resp_json.get("data"), list) and len(resp_json["data"]) > 0:
             result = resp_json["data"][0]
             if isinstance(result, str):
                 return result
-            # Sometimes result may be dict/other; convert to string
             return json.dumps(result)
         raise RuntimeError("Unexpected HF Space response format: %s" % resp_json)
 
