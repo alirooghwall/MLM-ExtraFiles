@@ -176,7 +176,8 @@ def build_system_prompt_dari(user_doc: dict, extra: Optional[str] = "") -> str:
 # ----------------------------
 # Utility: parse possible JSON actions from model output
 # ----------------------------
-JSON_ACTION_RE = re.compile(r"\{(?:[^{}]|(?R))*\}", re.DOTALL)  # naive balanced braces regex (may be heavy)
+JSON_ACTION_RE = re.compile(r"\{.*\}", re.DOTALL)
+  # naive balanced braces regex (may be heavy)
 
 def extract_json_actions(text: str) -> List[Dict[str, Any]]:
     """
