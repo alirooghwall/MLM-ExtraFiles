@@ -1,8 +1,10 @@
 fastapi
-uvicorn
-pymongo
-transformers
-huggingface_hub
-gradio
+uvicorn[standard]
 gunicorn
-python-multipart  # for future file uploads
+httpx
+pydantic
+pymongo
+python-multipart
+python-dotenv
+pytesseract
+Pillow
