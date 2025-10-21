@@ -3,7 +3,7 @@
 Production-ready FastAPI backend for MLM + Study Coach AI (Dari).
 Place this file at backend/app.py and deploy to Render (or run locally).
 
-Requirements (put in backend/requirements.txt):
+Requirements (backend/requirements.txt):
 fastapi
 uvicorn[standard]
 httpx
@@ -13,7 +13,6 @@ python-multipart
 python-dotenv
 pytesseract        # optional, only if you want OCR on server
 Pillow             # required by pytesseract
-# If you plan to load models locally (NOT recommended on Render free): transformers accelerate torch
 """
 
 import os
@@ -28,7 +27,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from datetime import datetime
 
-# Optional OCR (install pytesseract + pillow if you want upload OCR)
+# Optional OCR
 try:
     from PIL import Image
     import pytesseract
@@ -37,13 +36,12 @@ except Exception:
     OCR_AVAILABLE = False
 
 # ----------------------------
-# Configuration (via ENV VARS)
+# Configuration via ENV VARS
 # ----------------------------
 MONGO_URI = os.getenv("MONGO_URI")
-HF_SPACE_URL = os.getenv("HF_SPACE_URL")  # e.g. https://axelord999-mlm-study-coach.hf.space/run/predict
-HF_TOKEN = None  # No token needed for public Space
-LOCAL_MODEL = os.getenv("LOCAL_MODEL", "0") == "1"  # "1" to load local transformers model (only if you installed libs and have resources)
-LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "")  # e.g. "tiiuae/falcon-7b-instruct"
+HF_SPACE_URL = os.getenv("HF_SPACE_URL")  # e.g. "https://axelord999-mlm-study-coach.hf.space/run/predict"
+LOCAL_MODEL = os.getenv("LOCAL_MODEL", "0") == "1"
+LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "")
 
 if not MONGO_URI:
     raise RuntimeError("MONGO_URI environment variable must be set.")
@@ -60,8 +58,6 @@ logger = logging.getLogger("mlm-coach-backend")
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
 db = client.get_database("mlm_ai_db")
 users_col = db.get_collection("users")
-
-# Ensure indexes for queries (user_id)
 users_col.create_index("user_id", unique=True)
 
 # ----------------------------
@@ -75,36 +71,20 @@ app = FastAPI(title="MLM Study Coach API", version="1.0")
 class ChatRequest(BaseModel):
     user_id: str
     message: str
-    language: Optional[str] = "dari"  # keep for future multilingual support
+    language: Optional[str] = "dari"
 
 class ChatResponse(BaseModel):
     response: str
-    actions: Optional[List[Dict[str, Any]]] = None   # optional structured actions parsed from AI reply
-
-class QuizStartRequest(BaseModel):
-    user_id: str
-
-class QuizAnswerRequest(BaseModel):
-    user_id: str
-    lesson_id: str
-    question_id: int
-    answer: str
-
-class TaskUpdateRequest(BaseModel):
-    user_id: str
-    task_id: str
-    status: str
-    note: Optional[str] = None
+    actions: Optional[List[Dict[str, Any]]] = None
 
 # ----------------------------
 # AI Integration Helpers
 # ----------------------------
-# If LOCAL_MODEL=True, you can load a transformers pipeline here (not provided by default to avoid heavy deps on Render)
 local_pipeline = None
 if LOCAL_MODEL:
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-        logger.info("Loading local model... this may take long and require a lot of memory.")
+        logger.info("Loading local model...")
         tokenizer = AutoTokenizer.from_pretrained(LOCAL_MODEL_NAME)
         model = AutoModelForCausalLM.from_pretrained(LOCAL_MODEL_NAME, device_map="auto")
         local_pipeline = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -115,16 +95,13 @@ if LOCAL_MODEL:
 
 async def call_remote_hf_space(prompt: str, max_tokens: int = 400) -> str:
     """
-    Call a public Hugging Face Space without authentication.
+    Call a Hugging Face Space (public) without a token.
     """
     if not HF_SPACE_URL:
         raise RuntimeError("HF_SPACE_URL must be set for remote AI calls.")
 
     payload = {"data": [prompt]}
-    headers = {}
-    if HF_TOKEN:  # only send token if it exists
-        headers["Authorization"] = f"Bearer {HF_TOKEN}"
-
+    headers = {}  # no HF_TOKEN needed for public space
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(HF_SPACE_URL, json=payload, headers=headers)
         r.raise_for_status()
@@ -137,13 +114,7 @@ async def call_remote_hf_space(prompt: str, max_tokens: int = 400) -> str:
         raise RuntimeError("Unexpected HF Space response format: %s" % resp_json)
 
 async def call_ai(prompt: str) -> str:
-    """
-    Central AI call function: chooses local pipeline vs remote HF Space.
-    Returns generated text.
-    """
-    logger.debug("AI prompt (truncated): %s", (prompt[:1000] + "...") if len(prompt) > 1000 else prompt)
     if LOCAL_MODEL and local_pipeline:
-        # local pipeline is synchronous; wrap in thread if necessary
         return local_pipeline(prompt, max_new_tokens=300, do_sample=True)[0]["generated_text"]
     else:
         return await call_remote_hf_space(prompt)
